@@ -1,0 +1,41 @@
+{
+  "university": "University of Mumbai",
+  "program": "Engineering",
+  "document_type": "Thesis/Dissertation/Project Report",
+
+  "source": {
+    "name": "University of Mumbai Guidelines for Thesis, Dissertation and Report",
+    "source_date": "2014",
+    "verified": "2026-09-03",
+    "scope": "Ph.D., M.E. and B.E. thesis/dissertation/project reports"
+  },
+
+  "rules": {
+    "page": {
+      "size": "A4",
+      "margins": {
+        "top": 15,
+        "bottom": 22,
+        "left": 30,
+        "right": 20,
+        "unit": "mm"
+      }
+    },
+
+    "font": {
+      "family": "Times New Roman",
+      "body_size": 12
+    },
+
+    "paragraph": {
+      "line_spacing": 1.5
+    },
+
+    "pagination": {
+      "require_page_field": true,
+      "preliminary_format": "lowerRoman",
+      "body_format": "decimal",
+      "body_starts_at": 1
+    }
+  }
+}

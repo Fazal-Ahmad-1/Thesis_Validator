@@ -1,0 +1,66 @@
+{
+  "university": "Amity University Mumbai",
+  "program": "B.Sc.",
+  "document_type": "Project Report",
+
+  "source": {
+    "name": "Amity University Mumbai B.Sc. Curriculum 2023-24",
+    "source_date": "2023-24",
+    "verified": "2026-09-03",
+    "scope": "Program-specific formatting requirements"
+  },
+
+  "rules": {
+    "page": {
+      "size": "A4",
+      "margins": {
+        "top": 2.5,
+        "bottom": 2.5,
+        "left": 2.5,
+        "right": 2.5,
+        "unit": "cm"
+      }
+    },
+
+    "font": {
+      "family": "Times New Roman",
+      "body_size": 12
+    },
+
+    "paragraph": {
+      "line_spacing": 1.5,
+      "alignment": "justified"
+    },
+
+    "headings": {
+  "main_heading": {
+    "style": "Heading 1",
+    "size": 14,
+    "bold": true,
+    "uppercase": true
+  },
+  "category_heading": {
+    "style": "Heading 2",
+    "size": 12,
+    "bold": true,
+    "uppercase": true
+  },
+  "sub_heading": {
+    "style": "Heading 3",
+    "size": 12,
+    "bold": true
+  }
+},
+
+    "pagination": {
+      "require_page_field": true,
+      "position": "bottom",
+      "alignment": "center"
+    },
+
+    "special_spacing": {
+      "summary": 1.0,
+      "references": 1.0
+    }
+  }
+}

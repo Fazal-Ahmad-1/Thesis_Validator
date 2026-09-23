@@ -1,0 +1,43 @@
+{
+  "university": "University of Kota",
+  "program": "Ph.D.",
+  "document_type": "Thesis",
+  "source": {
+    "name": "University of Kota Research Ordinances 124 to 139",
+    "source_date": "Amended in light of UGC Regulation 2022",
+    "verified": "2026-09-17",
+    "scope": "Ph.D. thesis formatting requirements",
+    "url": "https://uok.ac.in/Ordinance-Related-to-Research"
+  },
+  "rules": {
+    "page": {
+      "size": "A4",
+      "margins": {
+        "top": 1.0,
+        "bottom": 1.0,
+        "left": 1.5,
+        "right": 1.0,
+        "unit": "inch"
+      }
+    },
+    "font": {
+      "family": "Times New Roman",
+      "body_size": 12
+    },
+    "paragraph": {
+      "line_spacing": 1.5,
+      "alignment": "justified"
+    },
+    "headings": {
+      "_note": "The style field is an internal Word-style detection mapping. The source specifies heading appearance but does not require the use of a particular built-in Word heading style.",
+      "main_heading": {
+        "style": "Heading 1",
+        "size": 14,
+        "bold": true
+      }
+    },
+    "pagination": {
+      "require_page_field": false
+    }
+  }
+}

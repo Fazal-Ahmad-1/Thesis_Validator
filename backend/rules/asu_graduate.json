@@ -1,0 +1,73 @@
+{
+  "university": "Arizona State University",
+  "program": "Graduate College",
+  "document_type": "Thesis/Dissertation",
+
+  "source": {
+    "name": "ASU Graduate College Format Manual",
+    "verified": "2026-09-03"
+  },
+
+  "rules": {
+    "page": {
+      "size": "Letter",
+      "margins": {
+        "top": 1.0,
+        "bottom": 1.0,
+        "left": 1.25,
+        "right": 1.25,
+        "unit": "inch"
+      }
+    },
+
+    "font": {
+      "allowed": [
+        {
+          "family": "Arial",
+          "size": 10
+        },
+        {
+          "family": "Century",
+          "size": 11
+        },
+        {
+          "family": "Garamond",
+          "size": 12
+        },
+        {
+          "family": "Georgia",
+          "size": 11
+        },
+        {
+          "family": "Sans Serif",
+          "size": 10
+        },
+        {
+          "family": "Tahoma",
+          "size": 10
+        },
+        {
+          "family": "Times New Roman",
+          "size": 12
+        },
+        {
+          "family": "Verdana",
+          "size": 10
+        }
+      ]
+    },
+
+    "paragraph": {
+      "line_spacing": 2.0
+    },
+
+    "pagination": {
+      "require_page_field": true,
+      "position": "bottom",
+      "alignment": "center",
+      "preliminary_format": "lowerRoman",
+      "body_format": "decimal",
+      "body_starts_at": 1
+    }
+  }
+}

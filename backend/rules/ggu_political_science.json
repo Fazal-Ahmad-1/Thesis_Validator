@@ -1,0 +1,48 @@
+{
+  "university": "Guru Ghasidas Vishwavidyalaya",
+  "program": "MA/PhD Political Science",
+  "document_type": "Dissertation/Thesis",
+  "source": {
+    "name": "Guidelines for Synopsis and Dissertation/Thesis Preparation \u2014 Department of Political Science, School of Social Sciences",
+    "source_date": "Undated departmental guideline",
+    "verified": "2026-09-17",
+    "scope": "Department of Political Science, School of Social Sciences",
+    "url": "https://www.ggu.ac.in/media/attachments/course/Guidelines_for_Dissertation_-_Thesis_preparation_Signed.pdf"
+  },
+  "rules": {
+    "page": {
+      "size": "A4",
+      "margins": {
+        "top": 2.5,
+        "bottom": 2.5,
+        "left": 3.0,
+        "right": 2.1,
+        "unit": "cm"
+      }
+    },
+    "font": {
+      "family": "Times New Roman",
+      "body_size": 12
+    },
+    "paragraph": {
+      "line_spacing": 1.5,
+      "alignment": "justified"
+    },
+    "headings": {
+      "_note": "The style field is an internal Word-style detection mapping. The source specifies heading appearance but does not require the use of a particular built-in Word heading style.",
+      "main_heading": {
+        "style": "Heading 1",
+        "size": 12,
+        "bold": true
+      }
+    },
+    "pagination": {
+      "require_page_field": true,
+      "position": "bottom",
+      "alignment": "center",
+      "preliminary_format": "lowerRoman",
+      "body_format": "decimal",
+      "body_starts_at": 1
+    }
+  }
+}
