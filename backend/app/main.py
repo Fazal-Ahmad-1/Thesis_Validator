@@ -1,10 +1,13 @@
 import logging
 import os
 import tempfile
+import threading
+import time
+from collections import defaultdict, deque
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -14,6 +17,53 @@ logger = logging.getLogger("thesis_validator")
 
 MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10 MB
 UPLOAD_CHUNK_SIZE = 1024 * 1024     # 1 MB
+
+# Lightweight in-memory abuse protection for the public validation endpoint.
+RATE_LIMIT_REQUESTS = 10
+RATE_LIMIT_WINDOW_SECONDS = 60 * 60  # 1 hour
+_rate_limit_lock = threading.Lock()
+_rate_limit_requests = defaultdict(deque)
+
+
+def _get_client_ip(request: Request) -> str:
+    """Get the client IP. Render forwards the original client IP in X-Forwarded-For."""
+    forwarded_for = request.headers.get("x-forwarded-for")
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+
+    if request.client:
+        return request.client.host
+
+    return "unknown"
+
+
+def _check_rate_limit(request: Request) -> None:
+    """Allow at most RATE_LIMIT_REQUESTS per client IP in the rolling window."""
+    now = time.monotonic()
+    client_ip = _get_client_ip(request)
+    cutoff = now - RATE_LIMIT_WINDOW_SECONDS
+
+    with _rate_limit_lock:
+        timestamps = _rate_limit_requests[client_ip]
+
+        while timestamps and timestamps[0] <= cutoff:
+            timestamps.popleft()
+
+        if len(timestamps) >= RATE_LIMIT_REQUESTS:
+            raise HTTPException(
+                status_code=429,
+                detail="Too many validation requests. Please try again later."
+            )
+
+        timestamps.append(now)
+
+        # Remove stale IP entries to prevent unbounded memory growth.
+        stale_ips = [
+            ip for ip, entries in _rate_limit_requests.items()
+            if not entries or entries[-1] <= cutoff
+        ]
+        for ip in stale_ips:
+            del _rate_limit_requests[ip]
 
 LOCAL_ORIGINS = [
     "http://localhost:5173",
@@ -72,6 +122,7 @@ def health_check():
 
 @app.post("/api/validate")
 async def validate_docx(
+    request: Request,
     file: Optional[UploadFile] = File(default=None),
     profile_name: str = Form(...)
 ):
@@ -81,6 +132,8 @@ async def validate_docx(
     Uploaded documents are written only to a temporary server-side file,
     processed, and removed in the finally block.
     """
+
+    _check_rate_limit(request)
 
     if file is None or not file.filename:
         raise HTTPException(
