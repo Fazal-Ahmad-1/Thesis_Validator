@@ -26,7 +26,11 @@ _rate_limit_requests = defaultdict(deque)
 
 
 def _get_client_ip(request: Request) -> str:
-    """Get the client IP. Render forwards the original client IP in X-Forwarded-For."""
+    """Get the real client IP when running behind Cloudflare/Render."""
+    cloudflare_ip = request.headers.get("cf-connecting-ip")
+    if cloudflare_ip:
+        return cloudflare_ip.strip()
+
     forwarded_for = request.headers.get("x-forwarded-for")
     if forwarded_for:
         return forwarded_for.split(",")[0].strip()
