@@ -687,7 +687,7 @@ function App() {
                   University-specific formatting checks
                 </p>
                 <h1 className="mt-4 max-w-3xl font-serif text-4xl leading-tight sm:text-6xl">
-                  Check your thesis formatting before you submit.
+                  Check your thesis or lab report formatting before you submit.
                 </h1>
                 <p className="mt-6 max-w-2xl text-base leading-7 text-[#5B5A54] sm:text-lg">
                   Upload your Word document and review its formatting against the requirements configured for your university and program.
