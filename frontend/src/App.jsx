@@ -283,8 +283,37 @@ function AuthModal({ mode, email, password, authError, authMessage, isLoading, o
   )
 }
 
-function AuthControls({ user, onLogin, onSignup, onLogout }) {
-  if (user) return <div className="flex items-center gap-3"><span className="hidden max-w-48 truncate text-sm text-[#5B5A54] sm:inline">{user.email}</span><button type="button" onClick={onLogout} className="border border-[#D8D4CB] px-3 py-2 text-sm text-[#1F3A5F] hover:bg-[#EEF2F6]">Log out</button></div>
+function getHistoryProfile(profileName) {
+  for (const university of UNIVERSITIES) {
+    const program = university.programs.find((item) => item.profile === profileName)
+    if (program) {
+      return {
+        university: university.name,
+        program: program.label,
+      }
+    }
+  }
+
+  return {
+    university: 'Unknown university',
+    program: profileName || 'Unknown profile',
+  }
+}
+
+function formatHistoryDate(value) {
+  if (!value) return 'Date unavailable'
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'Date unavailable'
+
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(date)
+}
+
+function AuthControls({ user, onLogin, onSignup, onLogout, onHistory }) {
+  if (user) return <div className="flex items-center gap-3"><span className="hidden max-w-48 truncate text-sm text-[#5B5A54] sm:inline">{user.email}</span>{onHistory && <button type="button" onClick={onHistory} className="border border-[#D8D4CB] px-3 py-2 text-sm text-[#1F3A5F] hover:bg-[#EEF2F6]">History</button>}<button type="button" onClick={onLogout} className="border border-[#D8D4CB] px-3 py-2 text-sm text-[#1F3A5F] hover:bg-[#EEF2F6]">Log out</button></div>
   return <div className="flex items-center gap-2"><button type="button" onClick={onLogin} className="px-3 py-2 text-sm text-[#1F3A5F] hover:underline">Log in</button><button type="button" onClick={onSignup} className="bg-[#1F3A5F] px-3 py-2 text-sm font-medium text-white transition hover:bg-[#172D49]">Sign up</button></div>
 }
 
@@ -301,7 +330,11 @@ function App() {
   const [categoryFilter, setCategoryFilter] = useState('all')
   const [showValidator, setShowValidator] = useState(false)
   const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false)
+  const [showHistory, setShowHistory] = useState(false)
   const [user, setUser] = useState(null)
+  const [validationHistory, setValidationHistory] = useState([])
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false)
+  const [historyError, setHistoryError] = useState('')
   const [authMode, setAuthMode] = useState(null)
   const [authEmail, setAuthEmail] = useState('')
   const [authPassword, setAuthPassword] = useState('')
@@ -313,7 +346,16 @@ function App() {
   useEffect(() => {
     let mounted = true
     supabase.auth.getSession().then(({ data }) => { if (mounted) setUser(data.session?.user ?? null) })
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => { if (mounted) setUser(session?.user ?? null) })
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!mounted) return
+      const nextUser = session?.user ?? null
+      setUser(nextUser)
+      if (!nextUser) {
+        setShowHistory(false)
+        setValidationHistory([])
+        setHistoryError('')
+      }
+    })
     return () => { mounted = false; listener.subscription.unsubscribe() }
   }, [])
 
@@ -339,10 +381,50 @@ function App() {
     finally { setIsAuthLoading(false) }
   }
 
+  const loadValidationHistory = async () => {
+    if (!user) return
+
+    setIsHistoryLoading(true)
+    setHistoryError('')
+
+    try {
+      const { data, error } = await supabase
+        .from('validations')
+        .select('id, profile_name, score, blocking_error_count, created_at')
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+
+      setValidationHistory(data || [])
+    } catch (error) {
+      setHistoryError(
+        error?.message || 'Could not load your validation history.'
+      )
+    } finally {
+      setIsHistoryLoading(false)
+    }
+  }
+
+  const openHistory = async () => {
+    if (!user) {
+      openAuth('login')
+      return
+    }
+
+    setShowHistory(true)
+    setShowValidator(false)
+    setShowPrivacyPolicy(false)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+    await loadValidationHistory()
+  }
+
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut()
     if (error) { setRequestError(error.message); return }
     setUser(null)
+    setShowHistory(false)
+    setValidationHistory([])
+    setHistoryError('')
   }
 
   const selectedUniversity = UNIVERSITIES.find((u) => u.name === university)
@@ -395,54 +477,45 @@ function App() {
   }
 
   const handleValidate = async () => {
-  if (!selectedFile || !profileName) return
+    if (!selectedFile || !profileName) return
 
-  setIsLoading(true)
-  setRequestError('')
-  setResult(null)
-  setIssueFilter('all')
-  setCategoryFilter('all')
+    setIsLoading(true)
+    setRequestError('')
+    setResult(null)
+    setIssueFilter('all')
+    setCategoryFilter('all')
 
-  try {
-    const formData = new FormData()
-    formData.append('file', selectedFile)
-    formData.append('profile_name', profileName)
+    try {
+      const formData = new FormData()
+      formData.append('file', selectedFile)
+      formData.append('profile_name', profileName)
 
-    const { data: { session } } = await supabase.auth.getSession()
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        body: formData,
+      })
 
-    const headers = session?.access_token
-      ? { Authorization: `Bearer ${session.access_token}` }
-      : {}
-
-    const response = await fetch(API_URL, {
-      method: 'POST',
-      headers,
-      body: formData,
-    })
-
-    if (!response.ok) {
-      let message = `Validation failed (HTTP ${response.status}).`
-
-      try {
-        const errorBody = await response.json()
-        if (errorBody?.detail) message = errorBody.detail
-      } catch {
-        // Response wasn't JSON; keep the default message.
+      if (!response.ok) {
+        let message = `Validation failed (HTTP ${response.status}).`
+        try {
+          const errorBody = await response.json()
+          if (errorBody?.detail) message = errorBody.detail
+        } catch {
+          // Response wasn't JSON; keep the default message.
+        }
+        setRequestError(message)
+        return
       }
 
-      setRequestError(message)
-      return
+      setResult(await response.json())
+    } catch {
+      setRequestError(
+        'Could not reach the validation server. Please make sure the backend is running and try again.'
+      )
+    } finally {
+      setIsLoading(false)
     }
-
-    setResult(await response.json())
-  } catch {
-    setRequestError(
-      'Could not reach the validation server. Please make sure the backend is running and try again.'
-    )
-  } finally {
-    setIsLoading(false)
   }
-}
 
   const handleReset = () => {
     setResult(null)
@@ -571,6 +644,8 @@ function App() {
   ].filter((field) => field.value)
 
   const openValidator = () => {
+    setShowHistory(false)
+    setShowPrivacyPolicy(false)
     setShowValidator(true)
     window.setTimeout(() => {
       document.getElementById('validator')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -580,13 +655,162 @@ function App() {
   const goHome = () => {
     setShowValidator(false)
     setShowPrivacyPolicy(false)
+    setShowHistory(false)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   const openPrivacyPolicy = () => {
     setShowValidator(false)
+    setShowHistory(false)
     setShowPrivacyPolicy(true)
     window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  if (showHistory && user) {
+    return (
+      <>
+        <div className="min-h-screen bg-[#F6F5F1] text-[#1E2A38]">
+          <header className="border-b border-[#D8D4CB] bg-white/90">
+            <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-4 sm:px-8">
+              <button onClick={goHome} className="font-serif text-xl font-semibold tracking-tight">Thesis Validator</button>
+              <div className="flex items-center gap-3">
+                <AuthControls user={user} onLogin={() => openAuth('login')} onSignup={() => openAuth('signup')} onLogout={handleLogout} onHistory={openHistory} />
+                <button onClick={goHome} className="hidden text-sm text-[#1F3A5F] hover:underline sm:block">← Back to home</button>
+              </div>
+            </div>
+          </header>
+
+          <main>
+            <section className="border-b border-[#D8D4CB] bg-white">
+              <div className="mx-auto max-w-4xl px-5 py-14 sm:px-8 sm:py-20">
+                <p className="text-sm font-medium uppercase tracking-[0.18em] text-[#6B6A63]">
+                  Account
+                </p>
+                <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                  <div>
+                    <h1 className="font-serif text-4xl leading-tight sm:text-5xl">Validation History</h1>
+                    <p className="mt-4 max-w-2xl text-base leading-7 text-[#5B5A54]">
+                      Review the validation checks you have run while signed in. Uploaded DOCX files are not stored in this history.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={loadValidationHistory}
+                    disabled={isHistoryLoading}
+                    className="shrink-0 border border-[#1F3A5F] px-4 py-2.5 text-sm font-medium text-[#1F3A5F] hover:bg-[#EEF2F6] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isHistoryLoading ? 'Refreshing...' : 'Refresh'}
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            <section>
+              <div className="mx-auto max-w-4xl px-5 py-10 sm:px-8 sm:py-14">
+                {historyError && (
+                  <div className="mb-6 border border-[#E7CACA] bg-[#FBF2F2] px-4 py-3 text-sm text-[#A8332B]">
+                    {historyError}
+                  </div>
+                )}
+
+                {isHistoryLoading ? (
+                  <div className="border border-[#D8D4CB] bg-white p-8 text-center">
+                    <p className="text-sm text-[#5B5A54]">Loading your validation history...</p>
+                  </div>
+                ) : validationHistory.length === 0 ? (
+                  <div className="border border-[#D8D4CB] bg-white p-8 text-center sm:p-12">
+                    <h2 className="font-serif text-2xl">No validations yet</h2>
+                    <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-[#5B5A54]">
+                      Your signed-in validation runs will appear here after you check a document.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={openValidator}
+                      className="mt-6 bg-[#1F3A5F] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#172D49]"
+                    >
+                      Check a Document
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="mb-5 flex items-center justify-between">
+                      <p className="text-sm text-[#5B5A54]">
+                        {validationHistory.length} {validationHistory.length === 1 ? 'validation' : 'validations'}
+                      </p>
+                    </div>
+
+                    {validationHistory.map((validation) => {
+                      const profile = getHistoryProfile(validation.profile_name)
+                      const scoreValue = typeof validation.score === 'number' ? validation.score : null
+                      const blockingErrors = validation.blocking_error_count ?? 0
+
+                      return (
+                        <article key={validation.id} className="border border-[#D8D4CB] bg-white p-5 sm:p-6">
+                          <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="min-w-0">
+                              <p className="text-xs font-medium uppercase tracking-[0.14em] text-[#8A887E]">
+                                {profile.university}
+                              </p>
+                              <h2 className="mt-1 font-medium text-[#1E2A38]">
+                                {profile.program}
+                              </h2>
+                              <p className="mt-2 text-xs text-[#8A887E]">
+                                {formatHistoryDate(validation.created_at)}
+                              </p>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-6 sm:min-w-52">
+                              <div>
+                                <p className="text-xs uppercase tracking-wide text-[#8A887E]">Score</p>
+                                <p
+                                  className="mt-1 text-2xl font-semibold"
+                                  style={{ color: scoreValue === null ? '#8A887E' : scoreColor(scoreValue) }}
+                                >
+                                  {scoreValue === null ? '—' : `${scoreValue}/100`}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs uppercase tracking-wide text-[#8A887E]">Blocking issues</p>
+                                <p className="mt-1 text-2xl font-semibold text-[#1E2A38]">
+                                  {blockingErrors}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        </article>
+                      )
+                    })}
+
+                    <div className="pt-4">
+                      <button
+                        type="button"
+                        onClick={openValidator}
+                        className="w-full border border-[#1F3A5F] py-3 font-medium text-[#1F3A5F] transition-colors hover:bg-[#EEF2F6]"
+                      >
+                        Validate Another Document
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </section>
+          </main>
+        </div>
+        <AuthModal
+          mode={authMode}
+          email={authEmail}
+          password={authPassword}
+          authError={authError}
+          authMessage={authMessage}
+          isLoading={isAuthLoading}
+          onModeChange={openAuth}
+          onEmailChange={setAuthEmail}
+          onPasswordChange={setAuthPassword}
+          onSubmit={handleAuthSubmit}
+          onClose={closeAuth}
+        />
+      </>
+    )
   }
 
   if (showPrivacyPolicy) {
@@ -597,7 +821,7 @@ function App() {
           <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-4 sm:px-8">
             <button onClick={goHome} className="font-serif text-xl font-semibold tracking-tight">Thesis Validator</button>
             <div className="flex items-center gap-3">
-              <AuthControls user={user} onLogin={() => openAuth('login')} onSignup={() => openAuth('signup')} onLogout={handleLogout} />
+              <AuthControls user={user} onLogin={() => openAuth('login')} onSignup={() => openAuth('signup')} onLogout={handleLogout} onHistory={openHistory} />
               <button onClick={goHome} className="hidden text-sm text-[#1F3A5F] hover:underline sm:block">← Back to home</button>
             </div>
           </div>
@@ -651,13 +875,13 @@ function App() {
                     ],
                   ],
                   [
-  '4. Validation results',
-  [
-    'The validator returns formatting results to your browser, including detected issues, expected values, actual values, and informational notices where applicable.',
-    'If you are signed in, the application may save validation history metadata to your account, including the selected profile, validation score, blocking error count, and validation timestamp.',
-    'Uploaded DOCX documents are not intentionally stored as part of validation history.',
-  ],
-],
+                    '4. Validation results',
+                    [
+                      'The validator returns formatting results to your browser, including detected issues, expected values, actual values, and informational notices where applicable.',
+'If you are signed in, the application may save validation history metadata to your account, including the selected profile, validation score, blocking error count, and validation timestamp.',
+'Uploaded DOCX documents are not intentionally stored as part of validation history.',
+                    ],
+                  ],
                   [
                     '5. Information collected automatically',
                     [
@@ -680,13 +904,13 @@ function App() {
                     ],
                   ],
                   [
-  '8. Your choices',
-  [
-    'If you create an account, you can sign out from the application. Account deletion and profile-management controls are not yet implemented.',
-    'Authenticated users can use the application without uploading documents for storage; validation history contains metadata about completed validations rather than the uploaded DOCX itself.',
-    'You can choose not to upload a document. You should also avoid submitting confidential material unless you are comfortable with the service receiving it for processing.',
-  ],
-],
+                    '8. Your choices',
+                    [
+                      'If you create an account, you can sign out from the application. Account deletion and profile-management controls are not yet implemented.',
+'Authenticated users can use the application without uploading documents for storage; validation history contains metadata about completed validations rather than the uploaded DOCX itself.',
+'You can choose not to upload a document. You should also avoid submitting confidential material unless you are comfortable with the service receiving it for processing.',
+                    ],
+                  ],
                   [
                     '9. Changes to this policy',
                     [
@@ -760,7 +984,7 @@ function App() {
           <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-4 sm:px-8">
             <button onClick={goHome} className="font-serif text-xl font-semibold tracking-tight">Thesis Validator</button>
             <div className="flex items-center gap-3">
-              <AuthControls user={user} onLogin={() => openAuth('login')} onSignup={() => openAuth('signup')} onLogout={handleLogout} />
+              <AuthControls user={user} onLogin={() => openAuth('login')} onSignup={() => openAuth('signup')} onLogout={handleLogout} onHistory={openHistory} />
               <button onClick={openValidator} className="hidden bg-[#1F3A5F] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#172D49] sm:block">Check My Document</button>
             </div>
           </div>
@@ -1027,7 +1251,7 @@ function App() {
         <header className="mb-8">
           <div className="mb-5 flex items-center justify-between gap-4">
             <button onClick={goHome} className="text-sm text-[#1F3A5F] hover:underline">← Back to home</button>
-            <AuthControls user={user} onLogin={() => openAuth('login')} onSignup={() => openAuth('signup')} onLogout={handleLogout} />
+            <AuthControls user={user} onLogin={() => openAuth('login')} onSignup={() => openAuth('signup')} onLogout={handleLogout} onHistory={openHistory} />
           </div>
           <h1 className="font-serif text-3xl leading-tight sm:text-4xl">
             Thesis &amp; Lab Report Formatting Check
