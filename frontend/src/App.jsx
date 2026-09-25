@@ -1,4 +1,5 @@
-import { useMemo, useState, useRef } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
+import { supabase } from './lib/supabase'
 
 const UNIVERSITIES = [
   {
@@ -261,6 +262,32 @@ function IssueCard({ issue }) {
   )
 }
 
+function AuthModal({ mode, email, password, authError, authMessage, isLoading, onModeChange, onEmailChange, onPasswordChange, onSubmit, onClose }) {
+  if (!mode) return null
+  const isSignup = mode === 'signup'
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#1E2A38]/40 px-4" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="w-full max-w-md border border-[#D8D4CB] bg-white p-6 shadow-xl sm:p-8">
+        <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-medium uppercase tracking-[0.18em] text-[#6B6A63]">Account</p><h2 id="auth-modal-title" className="mt-2 font-serif text-2xl">{isSignup ? 'Create your account' : 'Log in to Thesis Validator'}</h2></div><button type="button" onClick={onClose} className="text-xl leading-none text-[#8A887E] hover:text-[#1E2A38]" aria-label="Close">×</button></div>
+        <p className="mt-3 text-sm leading-6 text-[#5B5A54]">{isSignup ? 'Create an account to prepare for future usage limits and saved validation features.' : 'Log in to access your Thesis Validator account.'}</p>
+        <form onSubmit={onSubmit} className="mt-6 space-y-4">
+          <div><label htmlFor="auth-email" className="block text-sm font-medium">Email</label><input id="auth-email" type="email" autoComplete="email" value={email} onChange={(e) => onEmailChange(e.target.value)} required className="mt-1.5 w-full border border-[#D8D4CB] bg-white px-3 py-2.5 text-[#1E2A38] focus:outline-none focus:ring-2 focus:ring-[#1F3A5F]" placeholder="you@example.com" /></div>
+          <div><label htmlFor="auth-password" className="block text-sm font-medium">Password</label><input id="auth-password" type="password" autoComplete={isSignup ? 'new-password' : 'current-password'} value={password} onChange={(e) => onPasswordChange(e.target.value)} required minLength={6} className="mt-1.5 w-full border border-[#D8D4CB] bg-white px-3 py-2.5 text-[#1E2A38] focus:outline-none focus:ring-2 focus:ring-[#1F3A5F]" placeholder="At least 6 characters" /></div>
+          {authError && <p className="border border-[#E7CACA] bg-[#FBF2F2] px-3 py-2.5 text-sm text-[#A8332B]">{authError}</p>}
+          {authMessage && <p className="border border-[#CFE3D6] bg-[#F1F7F3] px-3 py-2.5 text-sm text-[#2F6846]">{authMessage}</p>}
+          <button type="submit" disabled={isLoading} className="w-full bg-[#1F3A5F] py-3 font-medium text-white transition-colors hover:bg-[#182E4A] disabled:cursor-not-allowed disabled:bg-[#C7C4BA]">{isLoading ? 'Please wait...' : isSignup ? 'Create Account' : 'Log In'}</button>
+        </form>
+        <div className="mt-5 text-center text-sm text-[#5B5A54]">{isSignup ? 'Already have an account?' : "Don't have an account?"}{' '}<button type="button" onClick={() => onModeChange(isSignup ? 'login' : 'signup')} className="font-medium text-[#1F3A5F] hover:underline">{isSignup ? 'Log in' : 'Sign up'}</button></div>
+      </div>
+    </div>
+  )
+}
+
+function AuthControls({ user, onLogin, onSignup, onLogout }) {
+  if (user) return <div className="flex items-center gap-3"><span className="hidden max-w-48 truncate text-sm text-[#5B5A54] sm:inline">{user.email}</span><button type="button" onClick={onLogout} className="border border-[#D8D4CB] px-3 py-2 text-sm text-[#1F3A5F] hover:bg-[#EEF2F6]">Log out</button></div>
+  return <div className="flex items-center gap-2"><button type="button" onClick={onLogin} className="px-3 py-2 text-sm text-[#1F3A5F] hover:underline">Log in</button><button type="button" onClick={onSignup} className="bg-[#1F3A5F] px-3 py-2 text-sm font-medium text-white transition hover:bg-[#172D49]">Sign up</button></div>
+}
+
 function App() {
   const [university, setUniversity] = useState('')
   const [profileName, setProfileName] = useState('')
@@ -274,7 +301,49 @@ function App() {
   const [categoryFilter, setCategoryFilter] = useState('all')
   const [showValidator, setShowValidator] = useState(false)
   const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false)
+  const [user, setUser] = useState(null)
+  const [authMode, setAuthMode] = useState(null)
+  const [authEmail, setAuthEmail] = useState('')
+  const [authPassword, setAuthPassword] = useState('')
+  const [authError, setAuthError] = useState('')
+  const [authMessage, setAuthMessage] = useState('')
+  const [isAuthLoading, setIsAuthLoading] = useState(false)
   const fileInputRef = useRef(null)
+
+  useEffect(() => {
+    let mounted = true
+    supabase.auth.getSession().then(({ data }) => { if (mounted) setUser(data.session?.user ?? null) })
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => { if (mounted) setUser(session?.user ?? null) })
+    return () => { mounted = false; listener.subscription.unsubscribe() }
+  }, [])
+
+  const openAuth = (mode) => { setAuthMode(mode); setAuthEmail(''); setAuthPassword(''); setAuthError(''); setAuthMessage('') }
+  const closeAuth = () => { if (isAuthLoading) return; setAuthMode(null); setAuthEmail(''); setAuthPassword(''); setAuthError(''); setAuthMessage('') }
+
+  const handleAuthSubmit = async (event) => {
+    event.preventDefault(); setAuthError(''); setAuthMessage(''); setIsAuthLoading(true)
+    try {
+      if (authMode === 'signup') {
+        const { data, error } = await supabase.auth.signUp({ email: authEmail.trim(), password: authPassword })
+        if (error) throw error
+        if (data.session) { setAuthMessage('Account created successfully.'); setTimeout(closeAuth, 700) }
+        else setAuthMessage('Account created. Please confirm your email, then log in.')
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({ email: authEmail.trim(), password: authPassword })
+        if (error) throw error
+        setAuthMode(null)
+        setAuthEmail('')
+        setAuthPassword('')
+      }
+    } catch (error) { setAuthError(error?.message || 'Authentication failed. Please try again.') }
+    finally { setIsAuthLoading(false) }
+  }
+
+  const handleLogout = async () => {
+    const { error } = await supabase.auth.signOut()
+    if (error) { setRequestError(error.message); return }
+    setUser(null)
+  }
 
   const selectedUniversity = UNIVERSITIES.find((u) => u.name === university)
 
@@ -326,45 +395,54 @@ function App() {
   }
 
   const handleValidate = async () => {
-    if (!selectedFile || !profileName) return
+  if (!selectedFile || !profileName) return
 
-    setIsLoading(true)
-    setRequestError('')
-    setResult(null)
-    setIssueFilter('all')
-    setCategoryFilter('all')
+  setIsLoading(true)
+  setRequestError('')
+  setResult(null)
+  setIssueFilter('all')
+  setCategoryFilter('all')
 
-    try {
-      const formData = new FormData()
-      formData.append('file', selectedFile)
-      formData.append('profile_name', profileName)
+  try {
+    const formData = new FormData()
+    formData.append('file', selectedFile)
+    formData.append('profile_name', profileName)
 
-      const response = await fetch(API_URL, {
-        method: 'POST',
-        body: formData,
-      })
+    const { data: { session } } = await supabase.auth.getSession()
 
-      if (!response.ok) {
-        let message = `Validation failed (HTTP ${response.status}).`
-        try {
-          const errorBody = await response.json()
-          if (errorBody?.detail) message = errorBody.detail
-        } catch {
-          // Response wasn't JSON; keep the default message.
-        }
-        setRequestError(message)
-        return
+    const headers = session?.access_token
+      ? { Authorization: `Bearer ${session.access_token}` }
+      : {}
+
+    const response = await fetch(API_URL, {
+      method: 'POST',
+      headers,
+      body: formData,
+    })
+
+    if (!response.ok) {
+      let message = `Validation failed (HTTP ${response.status}).`
+
+      try {
+        const errorBody = await response.json()
+        if (errorBody?.detail) message = errorBody.detail
+      } catch {
+        // Response wasn't JSON; keep the default message.
       }
 
-      setResult(await response.json())
-    } catch {
-      setRequestError(
-        'Could not reach the validation server. Please make sure the backend is running and try again.'
-      )
-    } finally {
-      setIsLoading(false)
+      setRequestError(message)
+      return
     }
+
+    setResult(await response.json())
+  } catch {
+    setRequestError(
+      'Could not reach the validation server. Please make sure the backend is running and try again.'
+    )
+  } finally {
+    setIsLoading(false)
   }
+}
 
   const handleReset = () => {
     setResult(null)
@@ -513,18 +591,15 @@ function App() {
 
   if (showPrivacyPolicy) {
     return (
+    <>
       <div className="min-h-screen bg-[#F6F5F1] text-[#1E2A38]">
         <header className="border-b border-[#D8D4CB] bg-white/90">
-          <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4 sm:px-8">
-            <button onClick={goHome} className="font-serif text-xl font-semibold tracking-tight">
-              Thesis Validator
-            </button>
-            <button
-              onClick={goHome}
-              className="text-sm text-[#1F3A5F] hover:underline"
-            >
-              ← Back to home
-            </button>
+          <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-4 sm:px-8">
+            <button onClick={goHome} className="font-serif text-xl font-semibold tracking-tight">Thesis Validator</button>
+            <div className="flex items-center gap-3">
+              <AuthControls user={user} onLogin={() => openAuth('login')} onSignup={() => openAuth('signup')} onLogout={handleLogout} />
+              <button onClick={goHome} className="hidden text-sm text-[#1F3A5F] hover:underline sm:block">← Back to home</button>
+            </div>
           </div>
         </header>
 
@@ -538,7 +613,7 @@ function App() {
                 Privacy Policy
               </h1>
               <p className="mt-4 text-sm text-[#8A887E]">
-                Last updated: September 17, 2026
+                Last updated: September 25, 2026
               </p>
               <p className="mt-6 max-w-3xl text-base leading-7 text-[#5B5A54]">
                 This Privacy Policy explains how Thesis Validator handles information when you
@@ -557,7 +632,7 @@ function App() {
                     '1. Information you provide',
                     [
                       'The current validator lets you select a university/program and upload a DOCX file for formatting validation.',
-                      'The current MVP does not require an account, so it does not intentionally collect a name, email address, password, or profile information through an account system.',
+                      'The application supports optional accounts using Supabase Authentication. When you create an account, your email address is processed by Supabase for authentication.',
                     ],
                   ],
                   [
@@ -576,12 +651,13 @@ function App() {
                     ],
                   ],
                   [
-                    '4. Validation results',
-                    [
-                      'The validator returns formatting results to your browser, including detected issues, expected values, actual values, and informational notices where applicable.',
-                      'The current MVP does not provide an account-based history feature for saving your validation results.',
-                    ],
-                  ],
+  '4. Validation results',
+  [
+    'The validator returns formatting results to your browser, including detected issues, expected values, actual values, and informational notices where applicable.',
+    'If you are signed in, the application may save validation history metadata to your account, including the selected profile, validation score, blocking error count, and validation timestamp.',
+    'Uploaded DOCX documents are not intentionally stored as part of validation history.',
+  ],
+],
                   [
                     '5. Information collected automatically',
                     [
@@ -604,12 +680,13 @@ function App() {
                     ],
                   ],
                   [
-                    '8. Your choices',
-                    [
-                      'Because the current MVP does not require an account, there is no account profile to manage or delete.',
-                      'You can choose not to upload a document. You should also avoid submitting confidential material unless you are comfortable with the service receiving it for processing.',
-                    ],
-                  ],
+  '8. Your choices',
+  [
+    'If you create an account, you can sign out from the application. Account deletion and profile-management controls are not yet implemented.',
+    'Authenticated users can use the application without uploading documents for storage; validation history contains metadata about completed validations rather than the uploaded DOCX itself.',
+    'You can choose not to upload a document. You should also avoid submitting confidential material unless you are comfortable with the service receiving it for processing.',
+  ],
+],
                   [
                     '9. Changes to this policy',
                     [
@@ -658,23 +735,34 @@ function App() {
           </div>
         </footer>
       </div>
+      <AuthModal
+        mode={authMode}
+        email={authEmail}
+        password={authPassword}
+        authError={authError}
+        authMessage={authMessage}
+        isLoading={isAuthLoading}
+        onModeChange={openAuth}
+        onEmailChange={setAuthEmail}
+        onPasswordChange={setAuthPassword}
+        onSubmit={handleAuthSubmit}
+        onClose={closeAuth}
+      />
+    </>
     )
   }
 
   if (!showValidator) {
     return (
+    <>
       <div className="min-h-screen bg-[#F6F5F1] text-[#1E2A38]">
         <header className="border-b border-[#D8D4CB] bg-white/90">
-          <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4 sm:px-8">
-            <button onClick={goHome} className="font-serif text-xl font-semibold tracking-tight">
-              Thesis Validator
-            </button>
-            <button
-              onClick={openValidator}
-              className="bg-[#1F3A5F] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#172D49]"
-            >
-              Check My Document
-            </button>
+          <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-4 sm:px-8">
+            <button onClick={goHome} className="font-serif text-xl font-semibold tracking-tight">Thesis Validator</button>
+            <div className="flex items-center gap-3">
+              <AuthControls user={user} onLogin={() => openAuth('login')} onSignup={() => openAuth('signup')} onLogout={handleLogout} />
+              <button onClick={openValidator} className="hidden bg-[#1F3A5F] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#172D49] sm:block">Check My Document</button>
+            </div>
           </div>
         </header>
 
@@ -699,7 +787,7 @@ function App() {
                   >
                     Check My Document →
                   </button>
-                  <span className="text-sm text-[#8A887E]">DOCX files · Formatting report · No account required in this MVP</span>
+                  <span className="text-sm text-[#8A887E]">DOCX files · Formatting report · Accounts are optional</span>
                 </div>
               </div>
 
@@ -915,6 +1003,20 @@ function App() {
           </div>
         </footer>
       </div>
+      <AuthModal
+        mode={authMode}
+        email={authEmail}
+        password={authPassword}
+        authError={authError}
+        authMessage={authMessage}
+        isLoading={isAuthLoading}
+        onModeChange={openAuth}
+        onEmailChange={setAuthEmail}
+        onPasswordChange={setAuthPassword}
+        onSubmit={handleAuthSubmit}
+        onClose={closeAuth}
+      />
+    </>
     )
   }
 
@@ -925,6 +1027,7 @@ function App() {
         <header className="mb-8">
           <div className="mb-5 flex items-center justify-between gap-4">
             <button onClick={goHome} className="text-sm text-[#1F3A5F] hover:underline">← Back to home</button>
+            <AuthControls user={user} onLogin={() => openAuth('login')} onSignup={() => openAuth('signup')} onLogout={handleLogout} />
           </div>
           <h1 className="font-serif text-3xl leading-tight sm:text-4xl">
             Thesis &amp; Lab Report Formatting Check
@@ -1358,6 +1461,19 @@ function App() {
           </div>
         )}
       </div>
+      <AuthModal
+        mode={authMode}
+        email={authEmail}
+        password={authPassword}
+        authError={authError}
+        authMessage={authMessage}
+        isLoading={isAuthLoading}
+        onModeChange={openAuth}
+        onEmailChange={setAuthEmail}
+        onPasswordChange={setAuthPassword}
+        onSubmit={handleAuthSubmit}
+        onClose={closeAuth}
+      />
     </div>
   )
 }
