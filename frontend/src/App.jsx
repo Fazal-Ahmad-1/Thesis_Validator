@@ -487,12 +487,19 @@ function App() {
 
     try {
       const formData = new FormData()
-      formData.append('file', selectedFile)
-      formData.append('profile_name', profileName)
+formData.append('file', selectedFile)
+formData.append('profile_name', profileName)
 
-      const response = await fetch(API_URL, {
-        method: 'POST',
-        body: formData,
+const { data: { session } } = await supabase.auth.getSession()
+
+const headers = session?.access_token
+  ? { Authorization: `Bearer ${session.access_token}` }
+  : {}
+
+const response = await fetch(API_URL, {
+  method: 'POST',
+  headers,
+  body: formData,
       })
 
       if (!response.ok) {
